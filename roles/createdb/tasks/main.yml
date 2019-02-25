@@ -1,0 +1,65 @@
+- name: Add Postgres repo to sources list
+  apt_repository: repo='deb http://apt.postgresql.org/pub/repos/apt/ precise-pgdg main' state=present
+  sudo: yes
+- name: Add key for Postgres repo
+  apt_key: url=https://www.postgresql.org/media/keys/ACCC4CF8.asc state=present
+  sudo: yes
+- name: Ensure bash, OpenSSl, and libssl are the latest versions
+  apt: name={{ item }} update_cache=true state=latest
+  with_items:
+    - bash
+    - openssl
+    - libssl-dev
+    - libssl-doc
+  tags: packages
+
+- name: Install PostgreSQL
+  apt: name={{ item }} update_cache=true state=installed
+  with_items:
+    - postgresql-{{ db_version }} 
+    - python-psycopg2
+  tags: packages
+
+- name: Configure host based authentication (if entries are configured).
+  template:
+    src: "pg_hba.conf.j2"
+    dest: "/etc/postgresql/{{ db_version }}/main/pg_hba.conf"
+    owner: "postgres"
+    group: "postgres"
+    mode: 0600
+  notify: restart postgresql
+
+- name: change listen_addresses to '*'
+  replace:
+    path: /etc/postgresql/{{ db_version }}/main/postgresql.conf
+    regexp: '^#listen_addresses'
+    replace: "listen_addresses = '*' #"
+  notify:
+    - restart postgresql
+  tags:
+    - postgres
+- name: Ensure the PostgreSQL service is running
+  service: name=postgresql state=started enabled=yes
+
+- name: Ensure database is created
+  sudo_user: postgres
+  postgresql_db: name={{ db_name }}
+             encoding='UTF-8'
+             lc_collate='en_US.UTF-8'
+             lc_ctype='en_US.UTF-8'
+             template='template0'
+             state=present
+
+- name: Ensure user has access to the database
+  sudo_user: postgres
+  postgresql_user: db={{ db_name }}
+               name={{ db_user }}
+               password={{ db_password }}
+               priv=ALL
+               state=present
+
+- name: Ensure user does not have unnecessary privileges
+  sudo_user: postgres
+  postgresql_user: name={{ db_user }}
+                   role_attr_flags=NOSUPERUSER,NOCREATEDB
+                   state=present

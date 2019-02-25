@@ -1,0 +1,4 @@
+db_user: django
+db_name: django_db_01
+db_password: dbpassword
+db_version: 11
